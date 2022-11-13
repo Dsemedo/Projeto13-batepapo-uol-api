@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
@@ -21,7 +21,7 @@ const userSchema = joi.object({ name: joi.string().min(2).required() });
 const messageSchema = joi.object({
   to: joi.string().required(),
   text: joi.string().required(),
-  type: joi.required(),
+  type: joi.valid("private_message", "message"),
 });
 
 app.get("/participants", async (req, res) => {
@@ -35,10 +35,22 @@ app.get("/participants", async (req, res) => {
 });
 
 app.get("/messages", async (req, res) => {
+  const { user } = req.headers;
+  const limit = parseInt(req.query.limit);
+  const messages = await db
+    .collection("messages")
+    .find({ $or: [{ to: user }, { to: "Todos" }, { from: user }] })
+    .toArray();
+  console.log(limit);
+  console.log(user);
+
   try {
-    const messages = await db.collection("messages").find().toArray();
-    console.log(messages);
-    res.send(messages);
+    if (!limit) {
+      res.send(messages);
+    } else {
+      const messagesLimit = messages.slice(-limit);
+      res.send(messagesLimit);
+    }
   } catch (err) {
     console.log(err);
     res.sendStatus(500);
@@ -100,19 +112,30 @@ app.post("/messages", async (req, res) => {
     return;
   }
 
-  if (type !== "private_message" && type !== "message") {
-    res.sendStatus(422);
-    return;
-  }
+  if (to)
+    try {
+      await db
+        .collection("messages")
+        .insertOne({ from: user, to, text, type, time: now });
+      res.sendStatus(201);
+    } catch (err) {
+      console.log(err);
+      res.sendStatus(400);
+    }
+});
+
+app.post("/status", async (req, res) => {
+  const { user } = req.headers;
+  const now = dayjs().locale("pt-br").format("HH:mm:ss");
 
   try {
+    await db.collection("participants").findOne(user);
     await db
-      .collection("messages")
-      .insertOne({ from: user, to, text, type, time: now });
-    res.sendStatus(201);
+      .collection("participants")
+      .updateOne({ _id: ObjectId(user._id) }, { $set: lastStatus.value, now });
+    res.sendStatus(200);
   } catch (err) {
-    console.log(err);
-    res.sendStatus(400);
+    res.sendStatus(404);
   }
 });
 
