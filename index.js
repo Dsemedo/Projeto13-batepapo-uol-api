@@ -142,7 +142,7 @@ app.post("/status", async (req, res) => {
   }
 });
 
-setInterval(quitUser, 10000);
+setInterval(quitUser, 15000);
 
 async function quitUser() {
   const now = dayjs().locale("pt-br").format("HH:mm:ss");
@@ -152,11 +152,11 @@ async function quitUser() {
     .toArray();
 
   try {
-    arrayParticipants.forEach(async (u) => {
-      if (u.lastStatus < Date.now() - 10000) {
-        await db.collection("participants").deleteOne({ name: u.name });
+    arrayParticipants.forEach(async (p) => {
+      if (p.lastStatus < Date.now() - 10000) {
+        await db.collection("participants").deleteOne({ name: p.name });
         await db.collection("messages").insertOne({
-          from: u.name,
+          from: p.name,
           to: "Todos",
           text: "saiu da sala...",
           type: "status",
