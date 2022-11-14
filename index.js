@@ -16,7 +16,7 @@ let db;
 await mongoClient.connect();
 db = mongoClient.db("batePapoUol");
 
-const userSchema = joi.object({ name: joi.string().min(2).required() });
+const userSchema = joi.string().min(2).required();
 
 const messageSchema = joi.object({
   to: joi.string().required(),
@@ -59,6 +59,7 @@ app.get("/messages", async (req, res) => {
 
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
+  const now = dayjs().locale("pt-br").format("HH:mm:ss");
 
   const validation = userSchema.validate(name);
 
@@ -126,18 +127,47 @@ app.post("/messages", async (req, res) => {
 
 app.post("/status", async (req, res) => {
   const { user } = req.headers;
-  const now = dayjs().locale("pt-br").format("HH:mm:ss");
 
   try {
-    await db.collection("participants").findOne(user);
     await db
       .collection("participants")
-      .updateOne({ _id: ObjectId(user._id) }, { $set: lastStatus.value, now });
+      .updateOne(
+        { name: user },
+        { $set: { name: user, lastStatus: Date.now() } }
+      );
     res.sendStatus(200);
   } catch (err) {
+    console.log(err);
     res.sendStatus(404);
   }
 });
+
+setInterval(quitUser, 10000);
+
+async function quitUser() {
+  const now = dayjs().locale("pt-br").format("HH:mm:ss");
+  const arrayParticipants = await db
+    .collection("participants")
+    .find()
+    .toArray();
+
+  try {
+    arrayParticipants.forEach(async (u) => {
+      if (u.lastStatus < Date.now() - 10000) {
+        await db.collection("participants").deleteOne({ name: u.name });
+        await db.collection("messages").insertOne({
+          from: u.name,
+          to: "Todos",
+          text: "saiu da sala...",
+          type: "status",
+          time: now,
+        });
+      }
+    });
+  } catch (err) {
+    console.log(err);
+  }
+}
 
 app.listen(5000, () => {
   console.log("Server running in port: 5000");
